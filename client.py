@@ -38,36 +38,35 @@ def key_split(key, key_len):
     return key[0:key_len], key[key_len: key_len * 2], key[key_len * 2:]
 
 def hash_verify(h):
-    
-def challenge_encrypt(AES_key, msg):
-    cipher1 = AES
-    cipher = AES.new(key, AES.MODE_CTR)
-    cipher_msg = cipher.encrypt(msg)
-    encrypt_nonce = b64encode(cipher.nonce)
-    return cipher_msg, encrypt_nonce
+    pass
 
-def challenge_decrypt(cipher_msg, AES_key):
+def challenge_encrypt(key, msg):
+    aes = AES
+    iv = b64encode(secrets.token_bytes(16))
+    aes = AES.new(key, AES.MODE_CBC, iv)
+    cipher_msg = b64encode(aes.encrypt(msg))
+    return iv + cipher_msg
+
+def challenge_decrypt(key, cipher_text):
     try:
-        decrypt_nonce = b64decode(encrypt_nonce)
-        decrypt_msg = b64decode(cipher_msg)
-        cipher = AES.new(key, AES.MODE_CTR, nonce=decrypt_nonce)
+        iv = b64decode(cipher_text[:32])
+        decrypt_msg = b64decode(cipher_text[32:])
+        cipher = AES.new(key, AES.MODE_CBC, iv)
         msg = cipher.decrypt(decrypt_msg)
     except Exception as e:
         print("Incorrect decryption")
     return msg
-  
-def encrypt(key, msg):
-    cipher = AES.new(key, AES.MODE_CTR)
-    cipher_msg = cipher.encrypt(msg)
-    encrypt_nonce = b64encode(cipher.nonce)
-    return cipher_msg, encrypt_nonce
 
-def decrypt(cipher_msg, encrypt_nonce, key):
+def encrypt(key, msg):
+    cipher = AES.new(key, AES.MODE_GCM)
+    ciphertext, tag = cipher.encrypt_and_digest(msg)
+    encrypt_list = [b64encode(x).decode('utf-8') for x in [cipher.nonce, ciphertext, tag]]
+    return encrypt_list
+
+def decrypt(encrypt_list, key):
     try:
-        decrypt_nonce = b64decode(encrypt_nonce)
-        decrypt_msg = b64decode(cipher_msg)
-        cipher = AES.new(key, AES.MODE_CTR, nonce=decrypt_nonce)
-        msg = cipher.decrypt(decrypt_msg)
+        cipher = AES.new(key, AES.MODE_GCM, nonce=encrypt_list[0].b64decode())
+        msg = cipher.decrypt_and_verify(encrypt_list[1].b64decode(), encrypt_list[2].b64decode())
     except Exception as e:
         print("Incorrect decryption")
     return msg
@@ -113,12 +112,10 @@ if __name__ == "__main__":
         
         #il déchiffre le
         decrypted = challenge_decrypt(challenge)
-        
+
         #verify que le hash obtenu correspond au hash du mdp
         hash_verify(challenge):
-            
-     
-        
-        
+            pass
+
         #accept connexion ?
         sleep(1)
