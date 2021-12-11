@@ -1,2 +1,3 @@
-pycrypto
+pycrypto==2.6.1
 pycryptodome==3.8.0
+pytest==6.2.5
