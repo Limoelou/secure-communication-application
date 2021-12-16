@@ -49,7 +49,7 @@ def challenge_encrypt(key, msg):
     iv = secrets.token_bytes(16)
     aes = AES.new(key, AES.MODE_CBC, iv)
     cipher_msg = aes.encrypt(pad(msg, AES.block_size))
-    output = b64encode(iv + cipher_msg) # .decode('utf-8')
+    output = b64encode(iv + cipher_msg)  # .decode('utf-8')
     return output
 
 
@@ -63,34 +63,50 @@ def challenge_decrypt(key, rcv_msg):
         msg = aes.decrypt(cipher_text)
         msg = unpad(msg, AES.block_size, style="pkcs7")
     except Exception as e:
-        print("Incorrect decryption")
+        print(e, "Incorrect decryption")
     return msg
 
 
 def encrypt(key, msg):
-    cipher = AES.new(key, AES.MODE_GCM)
-    ciphertext, tag = cipher.encrypt_and_digest(msg)
-    encrypt_list = [b64encode(x).decode('utf-8') for x in [cipher.nonce, ciphertext, tag]]
+    aes = AES.new(key, AES.MODE_GCM)
+    ciphertext, tag = aes.encrypt_and_digest(msg)
+    encrypt_list = [b64encode(x) for x in [aes.nonce, ciphertext, tag]]
     return encrypt_list
 
 
-def decrypt(encrypt_list, key):
+def decrypt(encrypt_list: list, key):
+    print("=================")
+    print(type(encrypt_list))
+    print(encrypt_list[0])
+    print(encrypt_list[1])
+    print(encrypt_list[2])
+    print("=================")
+    msg = b""
     try:
-        cipher = AES.new(key, AES.MODE_GCM, nonce=encrypt_list[0].b64decode())
-        msg = cipher.decrypt_and_verify(encrypt_list[1].b64decode(), encrypt_list[2].b64decode())
+        encrypt_list = [b'ju3DNswV2yT0mkFukBRsgQ==', b'DvxMTuOVXhkOsELGvQ==', b'MV3lnWFqM/b7r+/i9QRL7Q==']
+        print("0", encrypt_list[0])
+        aes = AES.new(key, AES.MODE_GCM, nonce=b64decode(encrypt_list[0]))
+        print("arg1:", type(b64decode(encrypt_list[0])))
+        print("arg2:", type(b64decode(encrypt_list[1])))
+        
+        msg = aes.decrypt_and_verify(
+            b64decode(encrypt_list[1]), b64decode(encrypt_list[2]))
     except Exception as e:
-        print("Incorrect decryption")
+        print(e, "Incorrect decryption")
     return msg
 
 
 if __name__ == "__main__":
     key = secrets.token_bytes(16)
-    cipher = challenge_encrypt(key, b"Challenge Encryption/Decryption is working!")
-    decrypted = challenge_decrypt(key, cipher)
-    print(decrypted)
+    #print(type(key))
+    msg = b"does it work?"
+    encrypted_stuff = encrypt(key, msg)
+    print("encrypted stuff: ", type(encrypted_stuff), encrypted_stuff)
+    print(encrypted_stuff)
+    decrypted_stuff = decrypt(key, encrypted_stuff)
+    
 
 """
-if __name__ == "__main__":
     connect(client)
     auth(client)
     print("done")
