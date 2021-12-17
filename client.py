@@ -75,20 +75,9 @@ def encrypt(key, msg):
 
 
 def decrypt(encrypt_list: list, key):
-    print("=================")
-    print(type(encrypt_list))
-    print(encrypt_list[0])
-    print(encrypt_list[1])
-    print(encrypt_list[2])
-    print("=================")
     msg = b""
     try:
-        encrypt_list = [b'ju3DNswV2yT0mkFukBRsgQ==', b'DvxMTuOVXhkOsELGvQ==', b'MV3lnWFqM/b7r+/i9QRL7Q==']
-        print("0", encrypt_list[0])
         aes = AES.new(key, AES.MODE_GCM, nonce=b64decode(encrypt_list[0]))
-        print("arg1:", type(b64decode(encrypt_list[0])))
-        print("arg2:", type(b64decode(encrypt_list[1])))
-        
         msg = aes.decrypt_and_verify(
             b64decode(encrypt_list[1]), b64decode(encrypt_list[2]))
     except Exception as e:
@@ -98,13 +87,10 @@ def decrypt(encrypt_list: list, key):
 
 if __name__ == "__main__":
     key = secrets.token_bytes(16)
-    #print(type(key))
     msg = b"does it work?"
     encrypted_stuff = encrypt(key, msg)
-    print("encrypted stuff: ", type(encrypted_stuff), encrypted_stuff)
-    print(encrypted_stuff)
-    decrypted_stuff = decrypt(key, encrypted_stuff)
-    
+    decrypted_stuff = decrypt(encrypted_stuff, key)
+    print(decrypted_stuff)
 
 """
     connect(client)
