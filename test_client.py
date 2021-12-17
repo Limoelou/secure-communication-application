@@ -19,5 +19,5 @@ class TestClient:
 
     def test_decrypt(self):
         encrypted = client.encrypt(self.key, self.msg)
-        assert client.encrypt == client.decrypt(self.key, encrypted)
+        assert self.msg == client.decrypt(encrypted, self.key)
     
