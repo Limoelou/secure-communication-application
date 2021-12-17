@@ -1,40 +1,25 @@
 import socket
 from time import sleep
-from Crypto.Protocol.KDF import scrypt
+from Crypto.Protocol.KDF import scrypt, HKDF
 from Crypto.Cipher import AES
 import hashlib
 from Crypto.Util.Padding import pad, unpad
 import secrets
 from base64 import b64decode, b64encode
-HOST = "127.0.0.1"
-PORT = 60002
-
-SERVER_HOST = "127.0.0.1"
-SERVER_PORT = 60000
-
-client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-# client.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
-# length for the AES key generated
-session_key_len = 32
-
-# block size for the key generated
-block_size = 8
-
+from Crypto.Hash import SHA256
 
 def connect(client):
     client.connect((SERVER_HOST, SERVER_PORT))
 
 
 def auth(client):
-    print("Enter username : ")
+    # print("Enter username : ")
     USER = "Openluminus"
     client.send(USER.encode('utf-8'))
-    # if(client.recv(4096 == ))
 
-
-def deriv_key(pwd, salt):
-    return scrypt(pwd, salt, session_key_len*3, N=2**14, r=block_size, p=1)
+def deriv_key(password, salt):
+    #return scrypt(pwd, salt, session_key_len*3, N=2**14, r=block_size, p=1)
+    return HKDF(password, 32, salt, SHA256, 3)
 
 
 def key_split(key, key_len):
@@ -49,8 +34,7 @@ def challenge_encrypt(key, msg):
     iv = secrets.token_bytes(16)
     aes = AES.new(key, AES.MODE_CBC, iv)
     cipher_msg = aes.encrypt(pad(msg, AES.block_size, style="pkcs7"))
-    output = b64encode(iv + cipher_msg)  # .decode('utf-8')
-    return output
+    return b64encode(iv + cipher_msg)
 
 
 def challenge_decrypt(key, rcv_msg):
@@ -81,52 +65,40 @@ def decrypt(encrypt_list: list, key):
         msg = aes.decrypt_and_verify(
             b64decode(encrypt_list[1]), b64decode(encrypt_list[2]))
     except Exception as e:
-        print(e, "Incorrect decryption")       
+        print(e, "Incorrect decryption")
     return msg
 
 
 if __name__ == "__main__":
-
-    connect(client)
-    auth(client)
-    print("done")
+    HOST = "127.0.0.1"
+    #PORT = 60002
+    SERVER_HOST = "127.0.0.1"
+    SERVER_PORT = 60000
+    connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    session_key_len = 32
+    block_size = 8
+    connect(connection)
+    auth(connection)
 
     while True:
-        salt_from_server = client.recv(4096).decode('utf-8')
-        print("salt ", salt_from_server)
+        salt = connection.recv(6144)
+        password = "toto"
+        password_hash = hashlib.sha256(password.encode()).hexdigest().encode()
 
-        print("Enter password :")
-        password = "jambontoto"
-        print("password of the user (not sent) :", password) 
+        key1, key2, key3 = deriv_key(password_hash, salt)
 
-        # hash the password
-        password_hash = hashlib.sha256(password.encode())
-        print("password hash :", password_hash.hexdigest())
+        challenge1 = challenge_encrypt(key1, password_hash)
 
-        # generate the first session key from the hash of the password
-        digest = password_hash.hexdigest() # string
-        session_key = deriv_key(digest, salt_from_server) #scrypt(password_hash, salt_from_server, session_key_len * 3, N=2**14, r=block_size, p=1)
-        print("session key generated : ", session_key)
-        # separate the key into 3 equals parts : one is the challenge for the client, the second one is for the server, and the last one is the final session key used.
-        key1, key2, key3 = key_split(session_key, session_key_len)
-        print("key 1, key2, key 3 : ", key1, key2, key3)
+        connection.send(challenge1)
 
-        # le client envoie le challenge au serveur :
-        print("client sends challenge ...")
-        print("key 1 + len and type :", key1, len(key1), type(key1))
-        t = client.send(challenge_encrypt(key1, digest.encode()))
-        print(t)
-          
-        # le client reçoit le challenge du serveur :
-        print("client receives challenge ...")
-        challenge = client.recv(1024)
+        challenge2 = connection.recv(6144)
+        # print("challenge 2", type(challenge2), challenge2)
+        ch2_hash = challenge_decrypt(key2, challenge2)
 
-        # il déchiffre le challenge du serveur
-        decrypted = challenge_decrypt(challenge)
-        print("result of the decrypted challenge : ", decrypted)
-        # verify que le hash obtenu correspond au hash du mdp
-        if hash_verify(decrypted,password_hash):
-            pass
+        if hash_verify(ch2_hash, password_hash):
+            print("challenge 2 - ok")
+        else:
+            print("challenge 2 - failed")
+            connection.close()
 
-        # Une fois que les challenges ont été validés des deux côtés, 
         sleep(1)

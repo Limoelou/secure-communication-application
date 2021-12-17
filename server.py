@@ -3,24 +3,11 @@ from base64 import b64encode, b64decode
 import secrets
 from Crypto.Cipher import AES
 from Crypto.Hash import SHA256
-from Crypto.Protocol.KDF import scrypt
+from Crypto.Protocol.KDF import scrypt, HKDF
 from Crypto.Util.Padding import pad, unpad
+from Crypto.Hash import SHA256
 import hashlib
 import time
-
-HOST = "127.0.0.1"
-PORT = 60000
-session_key_len = 32
-block_size = 8
-counter = 0
-
-server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
-# Dictionary users / hashes of the passwords
-dict = {'Openluminus': '2c38b20740d3abb9142113ee6a206bd1c379f6389b4eca9e7f1cd352cd299176',
-        'amraji': 'f02b405bc0803997674a3b27512273336fdce54dec6dbe92c62b3b8b28d781a7',
-        'Leviath': 'c811df0e0133c4b0b577649864fb71ea2b0e2b8ec3bf23391ad3865084ba5584'}
 
 
 def connect(server):
@@ -28,8 +15,9 @@ def connect(server):
     return connection, client_address
 
 
-def deriv_key(pwd, salt):
-    return scrypt(pwd, salt, session_key_len*3, N=2**14, r=block_size, p=1)
+def deriv_key(password, salt):
+    #return scrypt(password, salt, session_key_len*3, N=2**14, r=block_size, p=1)
+    return HKDF(password, 32, salt, SHA256, 3)
 
 
 def key_split(key, key_len):
@@ -55,8 +43,8 @@ def challenge_encrypt(key, msg):
     iv = secrets.token_bytes(16)
     aes = AES.new(key, AES.MODE_CBC, iv)
     cipher_msg = aes.encrypt(pad(msg, AES.block_size, style="pkcs7"))
-    output = b64encode(iv + cipher_msg)  # .decode('utf-8')
-    return output
+
+    return b64encode(iv + cipher_msg)
 
 
 def challenge_decrypt(key, rcv_msg):
@@ -92,51 +80,49 @@ def decrypt(encrypt_list: list, key):
 
 
 if __name__ == "__main__":
+    HOST = "127.0.0.1"
+    PORT = 60000
+    session_key_len = 32
+    block_size = 8
+    counter = 0
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    dict = {'Openluminus': b'31f7a65e315586ac198bd798b6629ce4903d0899476d5741a9f32e2e521b6a66',
+            'amraji': b'f02b405bc0803997674a3b27512273336fdce54dec6dbe92c62b3b8b28d781a7',
+            'Leviath': b'c811df0e0133c4b0b577649864fb71ea2b0e2b8ec3bf23391ad3865084ba5584'}
+
     server.bind((HOST, PORT))
     server.listen(0)
 
     while True:
         connection, client_address = connect(server)
         while True:
-            user = connection.recv(1024).decode('utf-8')
+            user = connection.recv(6144).decode('utf-8')
             if (verify_username(user)):
-                print("Auth Successful")
-                # on récupère le mdp associé à l'utilisateur
-                password_hash = dict[user]
-                print("pass serv :", password_hash)
+                salt = secrets.token_hex(8).encode()
+                print("saaaalt", type(salt))
+                connection.send(salt)
 
-                # generation du sel
-                salt = secrets.token_hex(8)
-                print("salt from server:", salt)
-                connection.send(salt.encode('utf-8'))
-                # génération de clé de chiffrement (scrypt ?)
+                password = dict[user]
 
-                password_hash = hashlib.sha256(dict[user].encode())
+                key1, key2, key3 = deriv_key(password, salt)
 
-                digest = password_hash.hexdigest()
-                print("password hash ?:", digest)
-                # generate the first session key from the hash of the password
-                # scrypt(password_hash, salt_from_server, session_key_len * 3, N=2**14, r=block_size, p=1)
-                session_key = deriv_key(digest, salt)
+                challenge1 = connection.recv(6144)
 
-                # separate the key into 3 equals parts : one is the challenge for the client, the second one is for the server, and the last one is the final session key used.
-                key1, key2, key3 = key_split(session_key, session_key_len)
+                ch1_hash = challenge_decrypt(key1, challenge1)
 
-                challenge_client = connection.recv(1024)
+                print("aklsdjfaskldfhalskdjfhaklj")
+                print(password)
+                print(ch1_hash)
+                if hash_verify(ch1_hash, password):
+                    print("challenge 1 - ok")
+                else:
+                    print("challenge 1 - failed")
+                    connection.close()
                 
-                print("challenge client : ", challenge_client)
-                print("==============>", repr(challenge_client), type(challenge_client))
-                #print("chall decrypted : ", challenge_decrypt(key1, challenge_client))
-                #if challenge_decrypt(key1, challenge_client) == digest:
-                #    print("ça fonctionne")
-                #else:
-                #    print("ça fonctionne pas")
-                # le serveur envoie le challenge au client :
-                
-                connection.send(challenge_encrypt(key2, password_hash.hexdigest()))
-        
-                #si on reçoit un nouveau message, on dérive la clé de chiffrement pour générer une nouvelle clé de session  
+                challenge2 = challenge_encrypt(key2, password)
+                connection.send(challenge2)
+
             else:
-                print("Authentication failed")
-                connection.send("Connection refused, try again")
+                connection.send(b"Connection refused, try again")
                 connection.close()
