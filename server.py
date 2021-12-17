@@ -4,10 +4,12 @@ import secrets
 from Crypto.Cipher import AES
 from Crypto.Hash import SHA256
 from Crypto.Protocol.KDF import scrypt
+import hashlib
 
 HOST = "127.0.0.1"
 PORT = 60000
-
+session_key_len = 256
+block_size = 8
 counter = 0
 
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -48,44 +50,43 @@ def check_password(password_hash, guessed_password):
 
 
 def challenge_encrypt(key, msg):
-    # aes = AES
-    iv = b64encode(secrets.token_bytes(16))
+    iv = secrets.token_bytes(16)
     aes = AES.new(key, AES.MODE_CBC, iv)
-    cipher_msg = b64encode(aes.encrypt(msg))
-    return iv + cipher_msg
+    cipher_msg = aes.encrypt(pad(msg, AES.block_size))
+    output = b64encode(iv + cipher_msg)  # .decode('utf-8')
+    return output
 
 
-def challenge_decrypt(key, cipher_text):
+def challenge_decrypt(key, rcv_msg):
+    msg = ""
     try:
-        cipher_text = b64decode(cipher_text)
-
-        iv = cipher_text[:32]
-        decrypt_msg = b64decode(cipher_text[32:])
-        cipher = AES.new(key, AES.MODE_CBC, iv)
-        msg = cipher.decrypt(decrypt_msg)
+        decoded = b64decode(rcv_msg)
+        iv = decoded[:16]
+        cipher_text = decoded[16:]
+        aes = AES.new(key, AES.MODE_CBC, iv)
+        msg = aes.decrypt(cipher_text)
+        msg = unpad(msg, AES.block_size, style="pkcs7")
     except Exception as e:
-        print("Incorrect decryption")
+        print(e, "Incorrect decryption")
     return msg
 
 
 def encrypt(key, msg):
-    global counter
-    #nonce = counter ...
-    cipher = AES.new(key, AES.MODE_GCM)
-    ciphertext, tag = cipher.encrypt_and_digest(msg)
-    encrypt_list = [b64encode(x).decode('utf-8') for x in [cipher.nonce, ciphertext, tag]]
-    counter += 1
+    aes = AES.new(key, AES.MODE_GCM)
+    ciphertext, tag = aes.encrypt_and_digest(msg)
+    encrypt_list = [b64encode(x) for x in [aes.nonce, ciphertext, tag]]
     return encrypt_list
 
 
-def decrypt(encrypt_list, key):
+def decrypt(encrypt_list: list, key):
+    msg = b""
     try:
-        cipher = AES.new(key, AES.MODE_GCM, nonce=encrypt_list[0].b64decode())
-        msg = cipher.decrypt_and_verify(encrypt_list[1].b64decode(), encrypt_list[2].b64decode())
+        aes = AES.new(key, AES.MODE_GCM, nonce=b64decode(encrypt_list[0]))
+        msg = aes.decrypt_and_verify(
+            b64decode(encrypt_list[1]), b64decode(encrypt_list[2]))
     except Exception as e:
-        print("Incorrect decryption")
+        print(e, "Incorrect decryption")
     return msg
-#def create_session_key():
 
 
 if __name__ == "__main__":
@@ -100,24 +101,41 @@ if __name__ == "__main__":
                 print("Auth Successful")
                 #on récupère le mdp associé à l'utilisateur
                 password_hash = dict[user]
+                print("pass serv :", password_hash)
+                
                 #generation du sel
                 salt = secrets.token_hex(8)
+                print("salt from server:", salt)
                 connection.send(salt.encode('utf-8'))
                 #génération de clé de chiffrement (scrypt ?)
                 password_hash = hashlib.sha256(dict[user].encode())
-        
+                digest = password_hash.hexdigest()
+                print("password hash ?:", digest)
                 # generate the first session key from the hash of the password
-                session_key = deriv_key(password_hash, salt) #scrypt(password_hash, salt_from_server, session_key_len * 3, N=2**14, r=block_size, p=1)
-        
+                session_key = deriv_key(digest, salt) #scrypt(password_hash, salt_from_server, session_key_len * 3, N=2**14, r=block_size, p=1)
+                print("session key : ", session_key)
                 # separate the key into 3 equals parts : one is the challenge for the client, the second one is for the server, and the last one is the final session key used.
-                key1, key2, key3 = key_split(session_key, session_key_len*3)
-        
-                # le client envoie le challenge au serveur :
-                client.send(challenge_encrypt(key1, password_hash.hexdigest()))
+                key1, key2, key3 = key_split(session_key, session_key_len)
+                print("key1 : ", key1)
+                print("key2 : ", key2)
+                print("key3 : ", key3)
+            
+                challenge_client = connection.recv(1024).decode()
+
+                print("challenge client : ", challenge_client)
+
+                print(challenge_decrypt(key1, challenge_client))
+                if challenge_decrypt(key1, challenge_client) == digest:
+                        print("sa fionctojnaaa")
+                else:
+                    print("sa fonssionn po")
+                # le serveur envoie le challenge au client :
+                """
+                connection.send(challenge_encrypt(key2, password_hash.hexdigest()))
         
                 #si on reçoit un nouveau message, on dérive la clé de chiffrement pour générer une nouvelle clé de session  
             else:
                 print("Authentication failed")
                 connection.send("Connection refused, try again")
                 connection.close()
-
+                """

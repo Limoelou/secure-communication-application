@@ -28,7 +28,7 @@ def connect(client):
 
 def auth(client):
     print("Enter username : ")
-    USER = input()
+    USER = "Openluminus"
     client.send(USER.encode('utf-8'))
     # if(client.recv(4096 == ))
 
@@ -86,45 +86,48 @@ def decrypt(encrypt_list: list, key):
 
 
 if __name__ == "__main__":
-    key = secrets.token_bytes(16)
-    msg = b"does it work?"
-    encrypted_stuff = encrypt(key, msg)
-    decrypted_stuff = decrypt(encrypted_stuff, key)
-    print(decrypted_stuff)
 
-"""
     connect(client)
     auth(client)
     print("done")
-    while True:
-        salt_from_server = client.recv(4096).decode('utf-8')
-        print(salt_from_server)
 
-        print("Enter password : ")
-        password = input()
-        
-        # hash the password
-        password_hash = hashlib.sha256(password.encode())
-        
-        # generate the first session key from the hash of the password
-        session_key = deriv_key(password_hash, salt_from_server) #scrypt(password_hash, salt_from_server, session_key_len * 3, N=2**14, r=block_size, p=1)
-        
-        # separate the key into 3 equals parts : one is the challenge for the client, the second one is for the server, and the last one is the final session key used.
-        key1, key2, key3 = key_split(session_key, session_key_len*3)
-        
-        # le client envoie le challenge au serveur :
-        client.send(challenge_encrypt(key1, password_hash.hexdigest()))
-        
-        # le client reçoit le challenge du serveur :
-        challenge = client.recv(1024)
-        
-        # il déchiffre le
-        decrypted = challenge_decrypt(challenge)
+while True:
+    salt_from_server = client.recv(4096).decode('utf-8')
+    print("salt ", salt_from_server)
 
-        # verify que le hash obtenu correspond au hash du mdp
-        if hash_verify(decrypted,password_hash):
-            pass
+    print("Enter password :")
+    password = "jambontoto"
+    print("password of the user (not sent) :", password) 
 
-        # accept connexion ?
-        sleep(1)
-"""
+    # hash the password
+    password_hash = hashlib.sha256(password.encode())
+    print("password hash :", password_hash.hexdigest())
+    
+    # generate the first session key from the hash of the password
+    digest = password_hash.hexdigest()
+    session_key = deriv_key(digest, salt_from_server) #scrypt(password_hash, salt_from_server, session_key_len * 3, N=2**14, r=block_size, p=1)
+    print("session key generated : ", session_key)
+    # separate the key into 3 equals parts : one is the challenge for the client, the second one is for the server, and the last one is the final session key used.
+    key1, key2, key3 = key_split(session_key, session_key_len)
+    print("key 1, key2, key 3 : ", key1, key2,key3)
+    
+    # le client envoie le challenge au serveur :
+    print("client sends challenge ...")
+    print("key 1 + len and type :", key1, len(key1),type(key1))
+    t = client.send(challenge_encrypt(key1, digest).encode())
+    print(t)
+    """    
+    # le client reçoit le challenge du serveur :
+    print("client receives challenge ...")
+    challenge = client.recv(1024)
+        
+    # il déchiffre le
+    decrypted = challenge_decrypt(challenge)
+    print("result of the decrypted challenge : ", decrypted)
+    # verify que le hash obtenu correspond au hash du mdp
+    if hash_verify(decrypted,password_hash):
+        pass
+
+    # accept connexion ?
+    sleep(1)
+    """
