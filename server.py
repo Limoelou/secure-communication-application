@@ -9,6 +9,7 @@ from Crypto.Hash import SHA256
 
 counter = 0
 
+
 def xb(ba1, ba2):
     return bytes([_a ^ _b for (_a, _b) in zip(ba1, ba2)])
 
@@ -19,7 +20,6 @@ def connect(server):
 
 
 def deriv_key(password, salt):
-    #return scrypt(password, salt, session_key_len*3, N=2**14, r=block_size, p=1)
     return HKDF(password, 32, salt, SHA256, 3)
 
 
@@ -33,13 +33,6 @@ def hash_verify(decrypted, expected):
 
 def verify_username(user):
     return user in dict
-
-
-def check_password(password_hash, guessed_password):
-    try:
-        scrypt.decrypt(password_hash, guessed_password)
-    except:
-        print('erreur')
 
 
 def challenge_encrypt(key, msg):
@@ -114,7 +107,7 @@ if __name__ == "__main__":
                 else:
                     print("challenge 1 - failed")
                     connection.close()
-                
+
                 challenge2 = challenge_encrypt(key2, password)
                 connection.send(challenge2)
 
@@ -129,7 +122,7 @@ if __name__ == "__main__":
                 # second message
 
                 msg_enc = connection.recv(1024)
-                
+
                 tag = connection.recv(1024)
 
                 msg_dec = decrypt(key3, msg_enc, tag)

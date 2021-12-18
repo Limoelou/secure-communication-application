@@ -1,6 +1,6 @@
 import socket
 from time import sleep
-from Crypto.Protocol.KDF import scrypt, HKDF
+from Crypto.Protocol.KDF import HKDF
 from Crypto.Cipher import AES
 import hashlib
 from Crypto.Util.Padding import pad, unpad
@@ -8,23 +8,26 @@ import secrets
 from base64 import b64decode, b64encode
 from Crypto.Hash import SHA256
 import time
+from getpass import getpass
 
 counter = 0
 
+
 def xb(ba1, ba2):
     return bytes([_a ^ _b for (_a, _b) in zip(ba1, ba2)])
+
 
 def connect(client):
     client.connect((SERVER_HOST, SERVER_PORT))
 
 
 def auth(client):
-    # print("Enter username : ")
-    USER = "Openluminus"
+    print("Enter username :")
+    USER = input()
     client.send(USER.encode('utf-8'))
 
+
 def deriv_key(password, salt):
-    #return scrypt(pwd, salt, session_key_len*3, N=2**14, r=block_size, p=1)
     return HKDF(password, 32, salt, SHA256, 3)
 
 
@@ -42,10 +45,11 @@ def challenge_encrypt(key, msg):
     cipher_msg = aes.encrypt(pad(msg, AES.block_size, style="pkcs7"))
     return b64encode(iv + cipher_msg)
 
+
 def generate_nonce(base_nonce, counter):
-    #Incrementing with counter to avoid using the same twice
     coef = counter.to_bytes(12, 'big')
     return bytes([a ^ b for a, b in zip(base_nonce, coef)])
+
 
 def challenge_decrypt(key, rcv_msg):
     msg = ""
@@ -72,7 +76,6 @@ def encrypt(key, msg):
 
 if __name__ == "__main__":
     HOST = "127.0.0.1"
-    #PORT = 60002
     SERVER_HOST = "127.0.0.1"
     SERVER_PORT = 60000
     connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -83,7 +86,8 @@ if __name__ == "__main__":
 
     while True:
         salt = connection.recv(1024)
-        password = "toto"
+        print("Entrez le mot de passe : ")
+        password = getpass()
         password_hash = hashlib.sha256(password.encode()).hexdigest().encode()
 
         key1, key2, key3 = deriv_key(password_hash, salt)
@@ -93,7 +97,7 @@ if __name__ == "__main__":
         connection.send(challenge1)
 
         challenge2 = connection.recv(1024)
-        # print("challenge 2", type(challenge2), challenge2)
+
         ch2_hash = challenge_decrypt(key2, challenge2)
 
         if hash_verify(ch2_hash, password_hash):
