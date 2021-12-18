@@ -6,8 +6,11 @@ from Crypto.Hash import SHA256
 from Crypto.Protocol.KDF import scrypt, HKDF
 from Crypto.Util.Padding import pad, unpad
 from Crypto.Hash import SHA256
-import hashlib
-import time
+
+counter = 0
+
+def xb(ba1, ba2):
+    return bytes([_a ^ _b for (_a, _b) in zip(ba1, ba2)])
 
 
 def connect(server):
@@ -61,19 +64,14 @@ def challenge_decrypt(key, rcv_msg):
     return msg
 
 
-def encrypt(key, msg):
-    aes = AES.new(key, AES.MODE_GCM)
-    ciphertext, tag = aes.encrypt_and_digest(msg)
-    encrypt_list = [b64encode(x) for x in [aes.nonce, ciphertext, tag]]
-    return encrypt_list
-
-
-def decrypt(encrypt_list: list, key):
+def decrypt(key, ciphertext, tag):
+    global counter
     msg = b""
     try:
-        aes = AES.new(key, AES.MODE_GCM, nonce=b64decode(encrypt_list[0]))
-        msg = aes.decrypt_and_verify(
-            b64decode(encrypt_list[1]), b64decode(encrypt_list[2]))
+        nonce = HKDF(xb(key, counter.to_bytes(12, 'big')), 12, salt, SHA256, 1)
+        aes = AES.new(key, AES.MODE_GCM, nonce=nonce)
+        msg = aes.decrypt_and_verify(ciphertext, tag)
+        counter += 1
     except Exception as e:
         print(e, "Incorrect decryption")
     return msg
@@ -97,7 +95,7 @@ if __name__ == "__main__":
     while True:
         connection, client_address = connect(server)
         while True:
-            user = connection.recv(6144).decode('utf-8')
+            user = connection.recv(1024).decode('utf-8')
             if (verify_username(user)):
                 salt = secrets.token_hex(8).encode()
                 print("saaaalt", type(salt))
@@ -107,13 +105,10 @@ if __name__ == "__main__":
 
                 key1, key2, key3 = deriv_key(password, salt)
 
-                challenge1 = connection.recv(6144)
+                challenge1 = connection.recv(1024)
 
                 ch1_hash = challenge_decrypt(key1, challenge1)
 
-                print("aklsdjfaskldfhalskdjfhaklj")
-                print(password)
-                print(ch1_hash)
                 if hash_verify(ch1_hash, password):
                     print("challenge 1 - ok")
                 else:
@@ -122,6 +117,23 @@ if __name__ == "__main__":
                 
                 challenge2 = challenge_encrypt(key2, password)
                 connection.send(challenge2)
+
+                msg_enc = connection.recv(1024)
+
+                tag = connection.recv(1024)
+
+                msg_dec = decrypt(key3, msg_enc, tag)
+
+                print(msg_dec)
+
+                # second message
+
+                msg_enc = connection.recv(1024)
+                
+                tag = connection.recv(1024)
+
+                msg_dec = decrypt(key3, msg_enc, tag)
+                print(msg_dec)
 
             else:
                 connection.send(b"Connection refused, try again")

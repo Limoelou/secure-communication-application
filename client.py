@@ -7,6 +7,12 @@ from Crypto.Util.Padding import pad, unpad
 import secrets
 from base64 import b64decode, b64encode
 from Crypto.Hash import SHA256
+import time
+
+counter = 0
+
+def xb(ba1, ba2):
+    return bytes([_a ^ _b for (_a, _b) in zip(ba1, ba2)])
 
 def connect(client):
     client.connect((SERVER_HOST, SERVER_PORT))
@@ -36,6 +42,10 @@ def challenge_encrypt(key, msg):
     cipher_msg = aes.encrypt(pad(msg, AES.block_size, style="pkcs7"))
     return b64encode(iv + cipher_msg)
 
+def generate_nonce(base_nonce, counter):
+    #Incrementing with counter to avoid using the same twice
+    coef = counter.to_bytes(12, 'big')
+    return bytes([a ^ b for a, b in zip(base_nonce, coef)])
 
 def challenge_decrypt(key, rcv_msg):
     msg = ""
@@ -52,21 +62,12 @@ def challenge_decrypt(key, rcv_msg):
 
 
 def encrypt(key, msg):
-    aes = AES.new(key, AES.MODE_GCM)
+    global counter
+    nonce = HKDF(xb(key, counter.to_bytes(12, 'big')), 12, salt, SHA256, 1)
+    aes = AES.new(key, AES.MODE_GCM, nonce=nonce)
     ciphertext, tag = aes.encrypt_and_digest(msg)
-    encrypt_list = [b64encode(x) for x in [aes.nonce, ciphertext, tag]]
-    return encrypt_list
-
-
-def decrypt(encrypt_list: list, key):
-    msg = b""
-    try:
-        aes = AES.new(key, AES.MODE_GCM, nonce=b64decode(encrypt_list[0]))
-        msg = aes.decrypt_and_verify(
-            b64decode(encrypt_list[1]), b64decode(encrypt_list[2]))
-    except Exception as e:
-        print(e, "Incorrect decryption")
-    return msg
+    counter += 1
+    return ciphertext, tag
 
 
 if __name__ == "__main__":
@@ -81,7 +82,7 @@ if __name__ == "__main__":
     auth(connection)
 
     while True:
-        salt = connection.recv(6144)
+        salt = connection.recv(1024)
         password = "toto"
         password_hash = hashlib.sha256(password.encode()).hexdigest().encode()
 
@@ -91,7 +92,7 @@ if __name__ == "__main__":
 
         connection.send(challenge1)
 
-        challenge2 = connection.recv(6144)
+        challenge2 = connection.recv(1024)
         # print("challenge 2", type(challenge2), challenge2)
         ch2_hash = challenge_decrypt(key2, challenge2)
 
@@ -101,4 +102,15 @@ if __name__ == "__main__":
             print("challenge 2 - failed")
             connection.close()
 
+        msg_enc, tag = encrypt(key3, b"Let's sleep for a while")
+
+        connection.send(msg_enc)
+        connection.send(tag)
+
+        msg_enc, tag = encrypt(key3, b"another message")
+        connection.send(msg_enc)
+
+        time.sleep(1)
+        connection.send(tag)
+        print("The end")
         sleep(1)
